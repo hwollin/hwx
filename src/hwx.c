@@ -15,7 +15,7 @@
 
 //在http1.1及之后版本。如果是keep alive，则content-length和chunk必然是二选一
 //否则当你用浏览器访问时，响应体会无法显示
-#define RESP_OK "HTTP/1.1 200 OK\r\nServer: hwx\r\nContent-Length: 144\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n"
+#define RESP_OK "HTTP/1.1 200 OK\r\nServer: hwx\r\nContent-Length: 144\r\nContent-Type: text/html\r\nConnection: keep-alive\r\n\r\n"
 
 void write_response_to_buff(const char *file, char *buff);
 
@@ -33,7 +33,7 @@ int main(int argc, char *const *argv) {
     servaddr.sin_family = AF_INET;
 
     // converts the unsigned short integer 80 from host byte order to network byte order.
-    servaddr.sin_port = htons(9999);
+    servaddr.sin_port = htons(8088);
 
     // Address to accept any incoming messages.
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -63,6 +63,7 @@ int main(int argc, char *const *argv) {
         // <4> Await a connection on socket "listen_sock". When a connection arrives, open a new socket
         // to communicate with it, and return the new socket's fd
         int conn_sock = accept(listen_sock, (struct sockaddr *) &cliaddr, &cliaddr_len);
+        //printf("connection----------->%d\n", conn_sock);
 
         // <5> print client address info
         // inet_ntoa : converts the Internet host address "cliaddr.sin_addr" to "string ip address"
