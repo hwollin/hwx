@@ -4,12 +4,13 @@
 
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/epoll.h>
+#include <sys/event.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <errno.h>
 
 #define CONN_QUEUE_SIZE 1024
 #define BUFF_SIZE 1024
@@ -53,62 +54,66 @@ int main(int argc, char *const *argv) {
     char resp_buff[BUFF_SIZE] = {'\0'};
     write_response_to_buff(INDEX_HTML, resp_buff);
 
-    // epoll
-    int epollfd = epoll_create1(0);
-    struct epoll_event ev, events[MAX_EVENTS];
-    ev.events = EPOLLIN;
-    ev.data.fd = listen_sock;
+    // kqueue
+    int kq = kqueue();
+    // 代表单个事件
+    struct kevent ev;
+    // 事件列表
+    struct kevent evList[MAX_EVENTS];
 
-    // number of fd that events happen
-    int nfds;
+    // 宏用于初始化kevent结构体
+    EV_SET(&ev, listen_sock, EVFILT_READ, EV_ADD, 0, 0, 0);
 
-    // add listen_sock to epoll
-    epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev);
+    // The kevent() system call is used to register events with the queue, and
+    //     return any	pending	events to the user
+    kevent(kq, &ev, 1, NULL, 0, NULL);
 
+    //用于while循环
+    int event_num, i, flag;
     while (1) {
         //阻塞直到有事件发生
-        nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+        event_num = kevent(kq, NULL, 0, evList, MAX_EVENTS, NULL);
 
         //遍历发生的事件
-        for (int i = 0; i < nfds; i++) {
-            if (events[i].data.fd == listen_sock) {  // 有新的连接到来
+        for (i = 0; i < event_num; i++) {
+            if (evList[i].ident == listen_sock) {  // 有新的连接到来
                 int conn_sock = accept(listen_sock, (struct sockaddr *) &cliaddr, &cliaddr_len);
                 setnonblocking(conn_sock);
 
                 // print client ip
                 printf("hello %s\n", inet_ntoa(cliaddr.sin_addr));
 
-                // add conn_sock to epoll
-                ev.events = EPOLLIN | EPOLLET;
-                ev.data.fd = conn_sock;
-                epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev);
-            } else if (events[i].events & EPOLLIN) {  // conn_sock read
-                int conn_sock = events[i].data.fd;
+                // add conn_sock to kqueue
+                EV_SET(&ev, conn_sock, EVFILT_READ, EV_ADD, 0, 0, 0);
+                kevent(kq, &ev, 1, NULL, 0, NULL);
+            } else if (evList[i].filter & EVFILT_READ) {  // conn_sock read
+                int conn_sock = evList[i].ident;
 
                 // print request
                 do {
                     recv_len = recv(conn_sock, req_buff, BUFF_SIZE, 0);
+                    //返回-1表示出错，但真正的错误原因请看errno
+                    if(recv_len == -1) {
+                        //客户端关闭连接时删除事件
+                        if(errno == ECONNRESET) {
+                            EV_SET(&ev, conn_sock, EVFILT_READ, EV_DELETE, 0, 0, 0);
+                            kevent(kq, &ev, 1, NULL, 0, NULL);
+                        }
+                        flag = -1;
+                    }
                     printf("%s", req_buff);
                     memset(req_buff, 0, sizeof(req_buff));
                 } while (recv_len == BUFF_SIZE);
+
+                //发生错误时跳出本次循环处理下个事件
+                if(flag == -1) {
+                    flag = 0;
+                    continue;
+                }
                 printf("\n");
 
-                // 获取请求之后要去响应
-                ev.events = EPOLLOUT | EPOLLET;
-                ev.data.fd = conn_sock;
-                // 会触发EPOLLOUT事件
-                epoll_ctl(epollfd, EPOLL_CTL_MOD, conn_sock, &ev);
-            } else if (events[i].events & EPOLLOUT) {  // conn_sock write
-                int conn_sock = events[i].data.fd;
-                // send response
                 send(conn_sock, resp_buff, strlen(resp_buff), 0);
-
-                // 响应后要继续关注请求
-                ev.events = EPOLLIN | EPOLLET;
-                ev.data.fd = conn_sock;
-                epoll_ctl(epollfd, EPOLL_CTL_MOD, conn_sock, &ev);
             }
-
         }
     }
 }
