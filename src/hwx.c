@@ -85,15 +85,16 @@ int main(int argc, char *const *argv) {
                 epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev);
             } else if (events[i].events & EPOLLIN) {  // conn_sock read
                 int conn_sock = events[i].data.fd;
-
+                
+                // TODO 应该在此判断是不是客户端关闭连接，如果是则删除fd并处理下一个事件
+                // 此时的解决方案是在do里面判断，不太合理
+                
                 // print request
                 do {
                     recv_len = recv(conn_sock, req_buff, BUFF_SIZE, 0);
 
-                    // client close connection
+                    // 当客户端关闭连接时去读，读出来的长度为0，现在的处理方案存在bug
                     if(recv_len == 0) {
-                        //TODO 将该连接删除
-
                         flag = -1;
                     }
 
