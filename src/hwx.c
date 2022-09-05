@@ -65,6 +65,7 @@ int main(int argc, char *const *argv) {
     // add listen_sock to epoll
     epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev);
 
+    int flag;
     while (1) {
         //阻塞直到有事件发生
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -88,9 +89,22 @@ int main(int argc, char *const *argv) {
                 // print request
                 do {
                     recv_len = recv(conn_sock, req_buff, BUFF_SIZE, 0);
+
+                    // client close connection
+                    if(recv_len == 0) {
+                        //TODO 将该连接删除
+
+                        flag = -1;
+                    }
+
                     printf("%s", req_buff);
                     memset(req_buff, 0, sizeof(req_buff));
                 } while (recv_len == BUFF_SIZE);
+
+                if(flag == -1) {
+                    flag = 0;
+                    continue;
+                }
                 printf("\n");
 
                 // 获取请求之后要去响应
