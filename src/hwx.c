@@ -65,7 +65,7 @@ int main(int argc, char *const *argv) {
     // add listen_sock to epoll
     epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev);
 
-    int flag;
+    int req_len;
     while (1) {
         //阻塞直到有事件发生
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -85,25 +85,19 @@ int main(int argc, char *const *argv) {
                 epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev);
             } else if (events[i].events & EPOLLIN) {  // conn_sock read
                 int conn_sock = events[i].data.fd;
-                
-                // TODO 应该在此判断是不是客户端关闭连接，如果是则删除fd并处理下一个事件
-                // 此时的解决方案是在do里面判断，不太合理
+                req_len = 0;
                 
                 // print request
                 do {
                     recv_len = recv(conn_sock, req_buff, BUFF_SIZE, 0);
-
-                    // 当客户端关闭连接时去读，读出来的长度为0，现在的处理方案存在bug
-                    if(recv_len == 0) {
-                        flag = -1;
-                    }
+                    req_len += recv_len;
 
                     printf("%s", req_buff);
                     memset(req_buff, 0, sizeof(req_buff));
                 } while (recv_len == BUFF_SIZE);
 
-                if(flag == -1) {
-                    flag = 0;
+                // TODO 处理客户端关闭连接事件
+                if(req_len == 0) {
                     continue;
                 }
                 printf("\n");
