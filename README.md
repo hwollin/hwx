@@ -21,13 +21,13 @@
 ### 遇到的问题
 #### 已解决
 + 响应头中必须加上Content-Length（响应体长度，response-body）字段，否则当用浏览器访问时会无法获取到响应体
-
-#### 待解决
-+ 无法实现连接的复用，从chrome多次请求127.0.0.1，会发现每次都会创建一个新的连接
++ 无法实现连接的复用，从chrome多次请求127.0.0.1，会发现每次都会创建一个新的连接，epoll可以解决该问题
 ```c
 int conn_sock = accept(listen_sock, (struct sockaddr *) &cliaddr, &cliaddr_len);
 printf("connection----------->%d\n", conn_sock);
 ```
+
+#### 待解决
 + 如何优雅的关闭socket？这么关闭是有问题的
 ```c
 // <8> close conn socket
